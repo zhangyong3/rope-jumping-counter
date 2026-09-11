@@ -1,0 +1,63 @@
+# Rope Counter / 智能跳绳计数
+
+包名：`com.yzrun.ropecounter`
+
+一个完全离线的 Android 跳绳计数 MVP。应用通过 CameraX 获取实时画面，使用 MediaPipe Pose Landmarker 提取人体关键点，再通过可测试的运动状态机识别双脚单摇跳跃。
+
+## 已实现
+
+- 定数跳：每组目标次数、组数、组间休息
+- 定时跳：每组时长、组数、组间休息
+- 自由跳绳：持续到用户主动结束
+- 3 秒开跳倒计时、自动组间休息、暂停和继续
+- 后置/前置摄像头切换
+- 默认使用前置摄像头
+- 实时人体骨架和画面质量提示
+- 跳跃提示音、阶段振动提醒、训练时屏幕常亮
+- APK 内置“请站稳”“请保持全身入镜”和“三、二、一、开始”普通话音频，不依赖系统 TTS 或网络
+- APK 内置接近满幅音量的短促“嘀”声音频，每次有效计数播放一次
+- 最近 100 条训练摘要保存在设备本地
+- 摄像头帧不保存、不上传
+
+## 技术栈
+
+- Kotlin、Jetpack Compose、Material 3
+- CameraX 1.5.3 Preview + ImageAnalysis（保持 compileSdk 35 兼容）
+- MediaPipe Tasks Vision 1.0.0 + Pose Landmarker Lite
+- 最低 Android 8.0（API 26），编译和目标 API 35
+- APK 面向 ARM64 Android 真机
+- Java 17、Gradle 8.11.1、Android Gradle Plugin 8.9.2
+
+## 构建
+
+在 Android Studio 中打开仓库根目录，安装 Android SDK 35 后同步项目。命令行构建：
+
+```bash
+./gradlew testDebugUnitTest assembleDebug
+```
+
+Debug APK 输出到：
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+## 使用条件
+
+1. 固定手机，竖屏拍摄；默认使用前置摄像头，必要时可切换后置摄像头。
+2. 人物与镜头保持约 2–4 米距离，头部和双脚完整入镜。
+3. 点击开始后先站稳；只有稳定校准完成后，应用才启动 3 秒倒计时。
+4. 当前算法针对单人、双脚并跳、单摇设计。
+
+## 计数原理
+
+检测器使用肩、髋、膝和脚踝关键点。稳定站立后才建立基线，脚踝与髋部的垂直位移使用躯干长度归一化；连续跳绳时，每一跳都以最近一次落地低点作为新的局部基准，避免人体关键点缓慢漂移导致计数中断。信号经过指数平滑后进入 `READY → RISING → AIRBORNE → LANDING` 状态机，只有双脚同步上升、人体尺度稳定，并满足相对峰值高度、持续时间和最短间隔的完整周期才会计数。
+
+## 当前限制
+
+- 不识别绳子旋转，因此不支持双摇或三摇按绳圈计数。
+- 手持拍摄、多人入镜、身体被遮挡或强逆光会降低可靠性。
+- `sample1.mp4`、`sample2.mp4` 和 `test.mp4` 是调参与回归素材，不会被打包进 APK；最终阈值仍需在目标 Android 设备上用人工标注结果校准。
+- 当前本地历史使用 SharedPreferences 保存训练摘要，不保存视频或人体关键点。
+
+详细设计见 [docs/design.md](docs/design.md)。
