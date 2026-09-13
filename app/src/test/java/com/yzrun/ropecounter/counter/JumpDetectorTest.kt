@@ -79,7 +79,7 @@ class JumpDetectorTest {
     }
 
     @Test
-    fun walkingTowardCamera_recalibratesWithoutCounting() {
+    fun walkingTowardCamera_doesNotCount() {
         val detector = JumpDetector()
         var timestamp = 0L
         repeat(24) {
@@ -157,16 +157,62 @@ class JumpDetectorTest {
         assertEquals(7, jumps)
     }
 
-    private fun frame(timestampMs: Long, shiftUp: Float, scale: Float = 1f): PoseFrame {
+    @Test
+    fun largeLandingPositionChanges_doNotInterruptCounting() {
+        val detector = JumpDetector()
+        var timestamp = 0L
+        repeat(24) {
+            detector.process(frame(timestamp, 0f))
+            timestamp += 33
+        }
+
+        val landingPositions = listOf(
+            Triple(-0.18f, 0.00f, 0.82f),
+            Triple(0.16f, 0.025f, 1.18f),
+            Triple(-0.22f, -0.030f, 1.35f),
+            Triple(0.20f, 0.045f, 0.88f),
+            Triple(-0.12f, -0.020f, 1.25f),
+            Triple(0.10f, 0.030f, 0.95f),
+        )
+        var jumps = 0
+        landingPositions.forEach { (horizontalShift, groundShift, scale) ->
+            repeat(4) {
+                detector.process(
+                    frame(timestamp, groundShift, scale, horizontalShift),
+                )
+                timestamp += 33
+            }
+            listOf(0.008f, 0.022f, 0.042f, 0.060f, 0.050f, 0.030f, 0.012f, 0f)
+                .forEach { jumpLift ->
+                    if (
+                        detector.process(
+                            frame(timestamp, groundShift + jumpLift, scale, horizontalShift),
+                        ).jumpDetected
+                    ) {
+                        jumps += 1
+                    }
+                    timestamp += 33
+                }
+        }
+
+        assertEquals(landingPositions.size, jumps)
+    }
+
+    private fun frame(
+        timestampMs: Long,
+        shiftUp: Float,
+        scale: Float = 1f,
+        horizontalShift: Float = 0f,
+    ): PoseFrame {
         val points = MutableList(33) { PosePoint(0.5f, 0.5f, 0f, 1f, 1f) }
-        points[11] = PosePoint(0.42f, 0.55f - 0.25f * scale - shiftUp, 0f, 1f, 1f)
-        points[12] = PosePoint(0.58f, 0.55f - 0.25f * scale - shiftUp, 0f, 1f, 1f)
-        points[23] = PosePoint(0.45f, 0.55f - shiftUp, 0f, 1f, 1f)
-        points[24] = PosePoint(0.55f, 0.55f - shiftUp, 0f, 1f, 1f)
-        points[25] = PosePoint(0.46f, 0.55f + 0.17f * scale - shiftUp, 0f, 1f, 1f)
-        points[26] = PosePoint(0.54f, 0.55f + 0.17f * scale - shiftUp, 0f, 1f, 1f)
-        points[27] = PosePoint(0.46f, 0.55f + 0.35f * scale - shiftUp, 0f, 1f, 1f)
-        points[28] = PosePoint(0.54f, 0.55f + 0.35f * scale - shiftUp, 0f, 1f, 1f)
+        points[11] = PosePoint(0.42f + horizontalShift, 0.55f - 0.25f * scale - shiftUp, 0f, 1f, 1f)
+        points[12] = PosePoint(0.58f + horizontalShift, 0.55f - 0.25f * scale - shiftUp, 0f, 1f, 1f)
+        points[23] = PosePoint(0.45f + horizontalShift, 0.55f - shiftUp, 0f, 1f, 1f)
+        points[24] = PosePoint(0.55f + horizontalShift, 0.55f - shiftUp, 0f, 1f, 1f)
+        points[25] = PosePoint(0.46f + horizontalShift, 0.55f + 0.17f * scale - shiftUp, 0f, 1f, 1f)
+        points[26] = PosePoint(0.54f + horizontalShift, 0.55f + 0.17f * scale - shiftUp, 0f, 1f, 1f)
+        points[27] = PosePoint(0.46f + horizontalShift, 0.55f + 0.35f * scale - shiftUp, 0f, 1f, 1f)
+        points[28] = PosePoint(0.54f + horizontalShift, 0.55f + 0.35f * scale - shiftUp, 0f, 1f, 1f)
         return PoseFrame(timestampMs, points, 540, 960)
     }
 }

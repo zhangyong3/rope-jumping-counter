@@ -91,14 +91,9 @@ class JumpDetector {
                 lift = 0f,
             )
         }
-        val scaleChange = abs(measurements.torsoLength - baselineTorsoLength) /
-            baselineTorsoLength.coerceAtLeast(MIN_TORSO_LENGTH)
-        if (scaleChange > MAX_SCALE_CHANGE) {
-            restartCalibration(measurements)
-            previousTimestampMs = frame.timestampMs
-            return result(false, measurements.quality, "请站稳，正在校准", 0f)
-        }
-
+        // Do not compare the current position with the initial framing here. A jumper naturally
+        // drifts sideways and toward/away from the camera. The per-cycle floor below absorbs that
+        // accumulated translation, while the current torso length keeps jump amplitude normalized.
         val torso = measurements.torsoLength.coerceAtLeast(MIN_TORSO_LENGTH)
         val leftAnkleLift = (baselineLeftAnkleY - measurements.leftAnkleY) / torso
         val rightAnkleLift = (baselineRightAnkleY - measurements.rightAnkleY) / torso
@@ -179,7 +174,10 @@ class JumpDetector {
                     takeoffTimestampMs = frame.timestampMs
                     takeoffLift = cycleFloorLift
                     peakLift = smoothedLift
-                } else if (smoothedLift <= GROUNDED_LIFT) {
+                } else if (
+                    jumpDuration >= MIN_LANDING_SETTLE_MS &&
+                    abs(velocity) <= MAX_SETTLED_VELOCITY
+                ) {
                     state = MotionState.READY
                     cycleFloorLift = smoothedLift
                     updateGroundBaseline(measurements)
@@ -251,7 +249,7 @@ class JumpDetector {
     }
 
     private fun updateGroundBaseline(measurements: Measurements) {
-        if (abs(smoothedLift) > GROUNDED_LIFT) return
+        if (abs(smoothedLift - cycleFloorLift) > GROUNDED_LIFT) return
         baselineLeftAnkleY += BASELINE_ALPHA * (measurements.leftAnkleY - baselineLeftAnkleY)
         baselineRightAnkleY += BASELINE_ALPHA * (measurements.rightAnkleY - baselineRightAnkleY)
         baselineAnkleY += BASELINE_ALPHA * (measurements.ankleY - baselineAnkleY)
@@ -337,7 +335,6 @@ class JumpDetector {
         const val BASELINE_ALPHA = 0.025f
         const val MAX_CALIBRATION_MOVEMENT = 0.050f
         const val MAX_CALIBRATION_SCALE_MOVEMENT = 0.050f
-        const val MAX_SCALE_CHANGE = 0.14f
         const val CYCLE_FLOOR_ALPHA = 0.18f
         const val MIN_SINGLE_FOOT_RISING_VELOCITY = -0.25f
         const val MIN_FEET_RISING_VELOCITY = 0.06f
@@ -352,6 +349,8 @@ class JumpDetector {
         const val MIN_RISING_MS = 45L
         const val MAX_RISING_MS = 500L
         const val MIN_RISE_AMPLITUDE = 0.018f
+        const val MIN_LANDING_SETTLE_MS = 250L
+        const val MAX_SETTLED_VELOCITY = 0.08f
         const val MAX_JUMP_MS = 850L
         const val REFRACTORY_MS = 180L
         const val LOST_RESET_MS = 900L
